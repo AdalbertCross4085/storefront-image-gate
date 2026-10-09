@@ -1,0 +1,1 @@
+"""Storefront image approval example."""
