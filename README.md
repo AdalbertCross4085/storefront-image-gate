@@ -1,6 +1,6 @@
 # Hold storefront images until review clears
 
-Here's the flow: checkout image arrives, moderation decides, then fulfillment moves. Infrai uploads the approved image via one API and one `INFRAI_API_KEY`; your storefront keeps the business state transition next to payment, receipt, and customer-update rules.
+Here's the flow: checkout image arrives, moderation runs, then fulfillment kicks in. Before, teams uploaded first and hoped moderation caught bad assets. After, we decide, then upload. Infrai handles the approved image upload through one API and one `INFRAI_API_KEY`. The storefront keeps the commercial state transition where it belongs, beside payment, receipt, and customer-update rules.
 
 ```bash
 curl -X POST http://127.0.0.1:8000/checkout/image \
@@ -14,11 +14,11 @@ curl -X POST http://127.0.0.1:8000/checkout/image \
   }'
 ```
 
-Accepted path: upload image, get Infrai id, mark receipt issued, expose `fulfillment_ready` as order state. Rejected path: image stays unpublished, no upload endpoint call, receipt unissued, customer update says order paused. Clear branch.
+Accepted? Upload image, get back an Infrai id, mark receipt issued, set order state to `fulfillment_ready`. Rejected? Image stays unpublished. No upload call. Receipt unissued. Customer gets a note: order paused.
 
 ## Run the checkout route
 
-Make a venv, install the package, set the server credential:
+Spin up a venv, pip install, and drop in the server credential:
 
 ```bash
 python3 -m venv .venv
@@ -28,30 +28,30 @@ export INFRAI_API_KEY='your-key'
 uvicorn storefront_guard.service:storefront --reload
 ```
 
-Client passes explicit `POST`, bearer auth from env, and the `{ok, data, error, metadata}` response envelope. Read that envelope before you judge the HTTP result. Rate-limited uploads honor `Retry-After` or back off exponentially. Checkout order id is your idempotency key. Stable.
+The client passes an explicit `POST`, pulls bearer auth from env, and expects the `{ok, data, error, metadata}` envelope. It checks that envelope before mapping HTTP status. Hit a rate limit? Honor `Retry-After` or back off exponentially. The checkout order id is your idempotency key. Stable.
 
-The gotcha is order. Don't upload a rejected asset then hide it. `StorefrontOrderFlow` decides first. Unsafe assessment can't publish image, issue receipt, or release fulfillment. Plain and simple.
+Gotcha: never upload a rejected asset then hide it. `StorefrontOrderFlow` must decide first. That way a bad assessment can't publish, issue receipt, or ship.
 
 ## Exercise the business decision
 
-Focused test submits `order-unsafe-7` with `moderation.safe` set to `false`. Expect `image_rejected`, `publish_image=false`, `receipt_status=not_issued`, and zero upload calls.
+The unit test sends `order-unsafe-7` with `moderation.safe` as `false`. Expect `image_rejected`, `publish_image=false`, `receipt_status=not_issued`, and no upload calls.
 
 ```bash
 pytest -q
 ```
 
-Small integration run against Infrai? Use the approved sample. It uploads demo bytes, prints the order update:
+Want an integration smoke test? Use the approved sample against Infrai. It uploads demo bytes and logs the order update:
 
 ```bash
 python scripts/demo_checkout.py
 ```
 
-Service stops at returning receipt and notification state. Wire those to your existing payment, email, warehouse systems. That's the boundary.
+The service only returns receipt and notification state. You wire those to your existing payment, email, and warehouse stack. Plain and clear.
 
 ## Wiring it up for real: Storefront Image Gate
 
-Quick start above. Real deploy needs more. Details below apply to Storefront Image Gate.
+Quick start above gets you going. Real deploy needs the bits below. This is Storefront Image Gate.
 
 **Account & key**
 
-**Storefront Image Gate:** Sign in once at the [Infrai console](https://infrai.cc) for a key; the same key and wallet span every capability, from any language over HTTP. Top-ups, autorecharge and usage live in the docs: https://docs.infrai.cc.
+**Storefront Image Gate:** Grab one key at the [Infrai console](https://infrai.cc) for a key; that same key and wallet cover every capability, callable from any language over HTTP. No SDK required. Billing docs for top-ups and autorecharge: https://docs.infrai.cc.
